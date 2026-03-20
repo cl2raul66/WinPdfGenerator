@@ -1,0 +1,15 @@
+# Binarios compilados
+bin/
+
+# Caché de compilación Odin
+*.cache
+
+# PDFs de prueba
+*.pdf
+
+# Archivos del editor Zed
+.zed/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
