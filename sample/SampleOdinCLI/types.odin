@@ -1,7 +1,5 @@
 package winpdfgenerator
 
-// ── Internal PDF primitives ───────────────────────────────────
-
 PDF_Ref :: struct { id, gen: int }
 
 XRef_Entry :: struct {
@@ -10,30 +8,24 @@ XRef_Entry :: struct {
     in_use: bool,
 }
 
-// ── Geometry & Color ──────────────────────────────────────────
-
 Rect :: struct { left, top, right, bottom: f32 }
 
-Color_RGB :: struct { r, g, b: f32 } // 0.0 – 1.0
-
-// ── Page configuration ────────────────────────────────────────
+Color_RGB :: struct { r, g, b: f32 }
 
 Page_Info :: struct {
     page_num:     int,
-    width_pts:    int,  // 1 pt = 1/72 inch
+    width_pts:    int,
     height_pts:   int,
     content_rect: Maybe(Rect),
 }
 
 Page_Info_Builder :: struct { info: Page_Info }
 
-// ── Print attributes ──────────────────────────────────────────
-
 Paper_Size :: enum i32 {
-    Letter = 0,  // 612 × 792 pt
-    Legal  = 1,  // 612 × 1008 pt
-    A4     = 2,  // 595 × 842 pt
-    A3     = 3,  // 842 × 1191 pt
+    Letter = 0,
+    Legal  = 1,
+    A4     = 2,
+    A3     = 3,
 }
 
 Print_Attributes :: struct {
@@ -46,8 +38,6 @@ Print_Attributes :: struct {
 }
 
 Print_Attributes_Builder :: struct { attrs: Print_Attributes }
-
-// ── Content objects ───────────────────────────────────────────
 
 Pdf_Page_Text_Object :: struct {
     text:      string,
@@ -79,8 +69,6 @@ Pdf_Page_Image_Object :: struct {
     width, height: f32,
 }
 
-// ── Content dispatch ──────────────────────────────────────────
-
 Content_Item_Kind :: enum { Text, Path, Image }
 
 Content_Item :: struct {
@@ -89,8 +77,6 @@ Content_Item :: struct {
     path:  ^Pdf_Page_Path_Object,
     image: ^Pdf_Page_Image_Object,
 }
-
-// ── Annotations ───────────────────────────────────────────────
 
 Highlight_Annotation :: struct {
     rects:  [dynamic]Rect,
@@ -120,8 +106,6 @@ Annotation :: struct {
     free_text: ^Free_Text_Annotation,
 }
 
-// ── Form widgets ──────────────────────────────────────────────
-
 Form_Widget_Kind :: enum i32 {
     Text_Field   = 0,
     Check_Box    = 1,
@@ -139,14 +123,12 @@ Form_Widget_Info :: struct {
     partial_name: string,
     read_only:    bool,
     required:     bool,
-    max_length:   int,       // Text_Field
-    list_options: []string,  // Combo_Box / List_Box
-    checked:      bool,      // Check_Box / Radio_Button
+    max_length:   int,
+    list_options: []string,
+    checked:      bool,
 }
 
 Form_Widget_Builder :: struct { info: Form_Widget_Info }
-
-// ── Links ─────────────────────────────────────────────────────
 
 Pdf_Page_Link_Content :: struct {
     rect: Rect,
@@ -159,8 +141,6 @@ Pdf_Page_Goto_Link_Content :: struct {
     dest_x:    f32,
     dest_y:    f32,
 }
-
-// ── Page & Document ───────────────────────────────────────────
 
 Pdf_Page :: struct {
     info:         Page_Info,
