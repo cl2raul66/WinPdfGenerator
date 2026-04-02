@@ -1,178 +1,132 @@
+#+private
 package winpdfgenerator
 
-// ── Internal PDF primitives ───────────────────────────────────
+Pdf_Object :: union {
+	bool,
+	i64,
+	f32,
+	string,
+	Pdf_Name,
+	[dynamic]Pdf_Object,
+	Pdf_Dict,
+	Pdf_Stream,
+	Pdf_Ref,
+	Pdf_Null,
+}
 
-PDF_Ref :: struct { id, gen: int }
+Pdf_Name   :: distinct string
+Pdf_Null   :: struct {}
+Pdf_Dict   :: map[Pdf_Name]Pdf_Object
+
+Pdf_Ref :: struct {
+	id:  int,
+	gen: int,
+}
+
+Pdf_Stream :: struct {
+	dict:     Pdf_Dict,
+	contents: []byte,
+}
+
+Rect :: struct {
+	llx, lly, urx, ury: f32,
+}
 
 XRef_Entry :: struct {
-    offset: i64,
-    gen:    int,
-    in_use: bool,
+	offset: i64,
+	gen:    int,
+	in_use: bool,
 }
 
-// ── Geometry & Color ──────────────────────────────────────────
-
-Rect :: struct { left, top, right, bottom: f32 }
-
-Color_RGB :: struct { r, g, b: f32 } // 0.0 – 1.0
-
-// ── Page configuration ────────────────────────────────────────
-
-Page_Info :: struct {
-    page_num:     int,
-    width_pts:    int,  // 1 pt = 1/72 inch
-    height_pts:   int,
-    content_rect: Maybe(Rect),
+Pdf_Object_Entry :: struct {
+	num: i64,
+	gen: int,
+	obj: Pdf_Object,
 }
 
-Page_Info_Builder :: struct { info: Page_Info }
-
-// ── Print attributes ──────────────────────────────────────────
-
-Paper_Size :: enum i32 {
-    Letter = 0,  // 612 × 792 pt
-    Legal  = 1,  // 612 × 1008 pt
-    A4     = 2,  // 595 × 842 pt
-    A3     = 3,  // 842 × 1191 pt
+Path_Command_Kind :: enum {
+	Move_To,
+	Line_To,
+	Curve_To,
+	Close,
 }
-
-Print_Attributes :: struct {
-    paper_size:    Paper_Size,
-    margin_top:    f32,
-    margin_bottom: f32,
-    margin_left:   f32,
-    margin_right:  f32,
-    color:         bool,
-}
-
-Print_Attributes_Builder :: struct { attrs: Print_Attributes }
-
-// ── Content objects ───────────────────────────────────────────
-
-Pdf_Page_Text_Object :: struct {
-    text:      string,
-    x, y:      f32,
-    font_name: string,
-    font_size: f32,
-    color:     Color_RGB,
-}
-
-Path_Command_Kind :: enum { Move_To, Line_To, Curve_To, Close }
 
 Path_Command :: struct {
-    kind: Path_Command_Kind,
-    pts:  [3][2]f32,
+	kind: Path_Command_Kind,
+	pts:  [6]f32,
+}
+
+Pdf_Page_Text_Object :: struct {
+	text:      string,
+	x, y:      f32,
+	font_name: string,
+	font_size: f32,
+	color:     Color_RGB,
 }
 
 Pdf_Page_Path_Object :: struct {
-    commands:     [dynamic]Path_Command,
-    fill_color:   Color_RGB,
-    stroke_color: Color_RGB,
-    line_width:   f32,
-    filled:       bool,
-    stroked:      bool,
+	commands:     [dynamic]Path_Command,
+	fill_color:   Color_RGB,
+	stroke_color: Color_RGB,
+	line_width:   f32,
+	filled:       bool,
+	stroked:      bool,
 }
 
 Pdf_Page_Image_Object :: struct {
-    image_path:    string,
-    x, y:          f32,
-    width, height: f32,
+	image_path:    string,
+	x, y:          f32,
+	width, height: f32,
 }
-
-// ── Content dispatch ──────────────────────────────────────────
-
-Content_Item_Kind :: enum { Text, Path, Image }
 
 Content_Item :: struct {
-    kind:  Content_Item_Kind,
-    text:  ^Pdf_Page_Text_Object,
-    path:  ^Pdf_Page_Path_Object,
-    image: ^Pdf_Page_Image_Object,
+	data: union {
+		Pdf_Page_Text_Object,
+		Pdf_Page_Path_Object,
+		Pdf_Page_Image_Object,
+	},
 }
 
-// ── Annotations ───────────────────────────────────────────────
-
-Highlight_Annotation :: struct {
-    rects:  [dynamic]Rect,
-    color:  Color_RGB,
-    author: string,
+Annotation_Highlight :: struct {
+	rects:  [dynamic]Rect,
+	color:  Color_RGB,
+	author: string,
 }
-
-Stamp_Annotation :: struct {
-    rect:    Rect,
-    icon:    string,
-    subject: string,
-}
-
-Free_Text_Annotation :: struct {
-    rect:      Rect,
-    content:   string,
-    font_size: f32,
-    color:     Color_RGB,
-}
-
-Annotation_Kind :: enum { Highlight, Stamp, Free_Text }
-
-Annotation :: struct {
-    kind:      Annotation_Kind,
-    highlight: ^Highlight_Annotation,
-    stamp:     ^Stamp_Annotation,
-    free_text: ^Free_Text_Annotation,
-}
-
-// ── Form widgets ──────────────────────────────────────────────
-
-Form_Widget_Kind :: enum i32 {
-    Text_Field   = 0,
-    Check_Box    = 1,
-    Radio_Button = 2,
-    Combo_Box    = 3,
-    List_Box     = 4,
-    Push_Button  = 5,
-    Signature    = 6,
-}
-
-Form_Widget_Info :: struct {
-    kind:         Form_Widget_Kind,
-    id:           int,
-    rect:         Rect,
-    partial_name: string,
-    read_only:    bool,
-    required:     bool,
-    max_length:   int,       // Text_Field
-    list_options: []string,  // Combo_Box / List_Box
-    checked:      bool,      // Check_Box / Radio_Button
-}
-
-Form_Widget_Builder :: struct { info: Form_Widget_Info }
-
-// ── Links ─────────────────────────────────────────────────────
-
-Pdf_Page_Link_Content :: struct {
-    rect: Rect,
-    uri:  string,
-}
-
-Pdf_Page_Goto_Link_Content :: struct {
-    rect:      Rect,
-    dest_page: int,
-    dest_x:    f32,
-    dest_y:    f32,
-}
-
-// ── Page & Document ───────────────────────────────────────────
 
 Pdf_Page :: struct {
-    info:         Page_Info,
-    items:        [dynamic]Content_Item,
-    annotations:  [dynamic]^Annotation,
-    links:        [dynamic]^Pdf_Page_Link_Content,
-    goto_links:   [dynamic]^Pdf_Page_Goto_Link_Content,
-    form_widgets: [dynamic]^Form_Widget_Info,
-    doc:          ^Pdf_Document,
+	media_box:   Rect,
+	resources:   Pdf_Dict,
+	items:       [dynamic]Content_Item,
+	annotations: [dynamic]Annotation,
+}
+
+Embedded_Font :: struct {
+	alias:         string,
+	ttf_data:      []byte,
+	ascent:        f32,
+	descent:       f32,
+	cap_height:    f32,
+	bbox:          Rect,
+	italic_angle:  f32,
+	stem_v:        f32,
+	flags:         u32,
+	widths:        [256]f32,
+	font_obj_id:   int,
+	desc_obj_id:   int,
+	widths_obj_id: int,
+	file_obj_id:   int,
 }
 
 Pdf_Document :: struct {
-    pages:       [dynamic]^Pdf_Page,
-    print_attrs: Maybe(Print_Attributes),
+	catalog:       Pdf_Dict,
+	root_ref:      Pdf_Ref,
+	pages:         [dynamic]^Pdf_Page,
+	metadata_info: Pdf_Info,
+	file_id:       [2][16]byte,
+	security:    Maybe(Security_Handler),
+	sig_fields:  [dynamic]^Sig_Field,
+	xref_table:  [dynamic]XRef_Entry,
+	objects:     [dynamic]Pdf_Object_Entry,
+	next_obj_num: i64,
+	embedded_fonts: map[string]Embedded_Font,
 }

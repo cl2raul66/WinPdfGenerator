@@ -1,0 +1,17 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Explicitly declare text files
+*.odin text
+*.md text
+
+# Declare files that will always have CRLF line endings on checkout
+*.bat text eol=crlf
+
+# Denote all files that are truly binary
+*.dll binary
+*.exe binary
+*.obj binary
+*.png binary
+*.jpg binary
+*.jpeg binary

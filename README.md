@@ -1,6 +1,6 @@
 # WinPdfGenerator
 
-Native PDF generator library for Windows, written in Odin.
+PDF file generator engine, it is a class library for native PDF file generation in Windows, written in Odin.
 
 ## Características
 
@@ -8,7 +8,8 @@ Native PDF generator library for Windows, written in Odin.
 - Biblioteca dinámica (DLL) para consumo desde cualquier lenguaje nativo de Windows
 - API C-compatible con convención `cdecl`
 - Sin dependencias externas - implementación pura en Odin
-- Soporta: texto con fuentes, paths (líneas/curvas), imágenes, anotaciones, formularios, links
+- Soporta: texto con fuentes, paths (líneas/curvas), imágenes y anotaciones
+- Para futuro: formularios y links
 
 ## Estructura del Proyecto
 
@@ -23,6 +24,7 @@ WinPdfGenerator/
 │   ├── image_xobjects.odin
 │   ├── color.odin
 │   ├── filters.odin
+│   ├── file.odin
 │   ├── interactive.odin
 │   ├── transparency.odin
 │   ├── metadata.odin
