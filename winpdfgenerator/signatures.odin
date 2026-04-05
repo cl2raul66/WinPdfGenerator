@@ -82,7 +82,7 @@ write_sig_value_object :: proc(sb: ^strings.Builder, id: int, sf: ^Sig_Field, ba
 	if sf.reason   != "" { fmt.sbprintf(sb, "  /Reason (%s)\n",      sf.reason) }
 	if sf.location != "" { fmt.sbprintf(sb, "  /Location (%s)\n",    sf.location) }
 	if sf.contact  != "" { fmt.sbprintf(sb, "  /ContactInfo (%s)\n", sf.contact) }
-	fmt.sbprintf(sb, "  /M (%s)\n", pdf_date_now())
+	fmt.sbprintf(sb, "  /M (%s)\n" )
 
 	if perm, ok := sf.mdp_perm.?; ok {
 		fmt.sbprintf(sb,

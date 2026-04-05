@@ -32,24 +32,34 @@ core_document_write_to_file :: proc(doc: ^Pdf_Document, filename: cstring) -> c.
 }
 
 core_document_close :: proc(doc: ^Pdf_Document) {
-	if doc == nil do return
-	for page in doc.pages {
-		delete(page.items)
-		delete(page.annotations)
-		free(page)
-	}
-	delete(doc.pages)
-	delete(doc.objects)
-	delete(doc.sig_fields)
-	delete(doc.xref_table)
+		if doc == nil do return
 
-	for key, emb in doc.embedded_fonts {
-		delete(emb.alias)
-		delete(emb.ttf_data)
-	}
-	delete(doc.embedded_fonts)
+		for page in doc.pages {
+			for item in page.items {
+				#partial switch v in item.data {
+				case Pdf_Page_Text_Object:
+					delete(v.text)
+					delete(v.font_name)
+				case Pdf_Page_Image_Object:
+					delete(v.image_path)
+				}
+			}
+			delete(page.items)
+			delete(page.annotations)
+			free(page)
+		}
+		delete(doc.pages)
 
-	free(doc)
+		for key, emb in doc.embedded_fonts {
+			delete(emb.ttf_data)
+		}
+		delete(doc.embedded_fonts)
+
+		delete(doc.objects)
+		delete(doc.sig_fields)
+		delete(doc.xref_table)
+
+		free(doc)
 }
 
 core_document_add_page :: proc(doc: ^Pdf_Document, width, height: f32) -> ^Pdf_Page {
@@ -115,15 +125,16 @@ core_document_add_embedded_font :: proc(doc: ^Pdf_Document, path: cstring, alias
 	return true
 }
 
-core_page_add_text :: proc(page: ^Pdf_Page, text: cstring, x, y: f32, font_name: cstring, size: f32) {
+core_page_add_text :: proc(page: ^Pdf_Page, text: cstring, x, y: f32, font_name: cstring, font_size: f32, text_color_rgb: [3] f32) {
 	if page == nil do return
+
 	obj := Pdf_Page_Text_Object {
 		text      = strings.clone_from_cstring(text),
 		x         = x,
 		y         = y,
 		font_name = strings.clone_from_cstring(font_name),
-		font_size = size,
-		color     = Color_RGB{0, 0, 0},
+		font_size = font_size,
+		color     = Color_RGB{text_color_rgb[0], text_color_rgb[1], text_color_rgb[2]},
 	}
 	append(&page.items, Content_Item{data = obj})
 }
@@ -138,6 +149,23 @@ core_page_add_image :: proc(page: ^Pdf_Page, path: cstring, x, y, width, height:
 		height     = height,
 	}
 	append(&page.items, Content_Item{data = img})
+}
+
+core_document_set_metadata :: proc(doc: ^Pdf_Document, title, author, subject, keywords, creator, producer: cstring) {
+	if doc == nil do return
+	if doc.metadata_info.title != ""    do delete(doc.metadata_info.title)
+	if doc.metadata_info.author != ""   do delete(doc.metadata_info.author)
+	if doc.metadata_info.subject != ""  do delete(doc.metadata_info.subject)
+	if doc.metadata_info.keywords != "" do delete(doc.metadata_info.keywords)
+	if doc.metadata_info.creator != ""  do delete(doc.metadata_info.creator)
+	if doc.metadata_info.producer != "" do delete(doc.metadata_info.producer)
+
+	if title != nil    do doc.metadata_info.title    = strings.clone_from_cstring(title)
+	if author != nil   do doc.metadata_info.author   = strings.clone_from_cstring(author)
+	if subject != nil  do doc.metadata_info.subject  = strings.clone_from_cstring(subject)
+	if keywords != nil do doc.metadata_info.keywords = strings.clone_from_cstring(keywords)
+	if creator != nil  do doc.metadata_info.creator  = strings.clone_from_cstring(creator)
+	if producer != nil do doc.metadata_info.producer = strings.clone_from_cstring(producer)
 }
 
 Image_Resource :: struct {
@@ -337,6 +365,8 @@ serialize_document :: proc(doc: ^Pdf_Document, filename: string) -> bool {
 		strings.builder_destroy(&frsb)
 	}
 
+	 metadata_id := next_id; next_id += 1
+
 	total := next_id - 1
 	offsets := make([]i64, total)
 	defer delete(offsets)
@@ -347,7 +377,7 @@ serialize_document :: proc(doc: ^Pdf_Document, filename: string) -> bool {
 	write_header(&sb)
 
 	offsets[0] = i64(strings.builder_len(sb))
-	fmt.sbprintf(&sb, "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+	fmt.sbprintf(&sb, "1 0 obj\n<< /Type /Catalog /Pages 2 0 R /Metadata %d 0 R >>\nendobj\n", metadata_id)
 
 	offsets[1] = i64(strings.builder_len(sb))
 	kids_sb := strings.builder_make()
@@ -490,6 +520,9 @@ serialize_document :: proc(doc: ^Pdf_Document, filename: string) -> bool {
 		delete(safe_alias)
 		delete(pdf_font_name)
 	}
+
+	offsets[metadata_id - 1] = i64(strings.builder_len(sb))
+    write_xmp_object(&sb, metadata_id, doc.metadata_info)
 
 	xref_offset := i64(strings.builder_len(sb))
 

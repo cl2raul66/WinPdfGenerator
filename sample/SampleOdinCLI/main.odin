@@ -1,43 +1,70 @@
-package pdf_cli
+package main
 
-import "core:c"
 import "core:fmt"
+import "core:os"
 
-foreign import winpdfgenerator "../../bin/WinPdfGenerator.lib"
+@(private)
+leer_opcion :: proc() -> int {
+	data: [16]byte
+	n, _ := os.read(os.stdin, data[:])
+	if n <= 0 do return -1
 
-foreign winpdfgenerator {
-    pdf_document_create           :: proc() -> rawptr ---
-    pdf_document_write_to_file    :: proc(doc: rawptr, filename: cstring) -> c.bool ---
-    pdf_document_close            :: proc(doc: rawptr) ---
-    page_info_builder_create_a4   :: proc(n: c.int) -> rawptr ---
-    page_info_builder_build       :: proc(b: rawptr) -> rawptr ---
-    page_info_free                :: proc(info: rawptr) ---
-    pdf_document_start_page        :: proc(doc, info: rawptr) -> rawptr ---
-    pdf_document_finish_page      :: proc(doc, page: rawptr) ---
-    pdf_page_text_object_create   :: proc(text: cstring, x, y: c.float, font_name: cstring, font_size: c.float) -> rawptr ---
-    pdf_page_text_object_set_color :: proc(obj: rawptr, r, g, b: c.float) ---
-    pdf_page_add_text_object      :: proc(page, obj: rawptr) ---
+	num := 0
+	started := false
+	for i := 0; i < n; i += 1 {
+		c := data[i]
+		if c >= '0' && c <= '9' {
+			num = num * 10 + int(c - '0')
+			started = true
+		} else if started {
+			break
+		}
+	}
+	return num
+}
+
+@(private)
+generar_documento_en_blanco :: proc(filename: cstring) -> bool {
+	doc := pdf_document_create()
+	defer pdf_document_close(doc)
+
+	b := page_info_builder_create(1, 595, 842)
+	info := page_info_builder_build(b)
+	defer page_info_free(info)
+
+	page := pdf_document_start_page(doc, info)
+	pdf_document_finish_page(doc, page)
+
+	return bool(pdf_document_write_to_file(doc, filename))
 }
 
 main :: proc() {
-    doc := pdf_document_create()
-    defer pdf_document_close(doc)
+	for {
+		fmt.println("=================================")
+		fmt.println("  Generador de PDF - Menu (DLL)")
+		fmt.println("=================================")
+		fmt.println("1. Documento en blanco (A4 Vertical)")
+		fmt.println("0. Salir")
+		fmt.println()
+		fmt.print("Seleccione opcion: ")
 
-    b := page_info_builder_create_a4(1)
-    info := page_info_builder_build(b)
-    defer page_info_free(info)
+		opcion := leer_opcion()
+		fmt.println()
 
-    page := pdf_document_start_page(doc, info)
-    pdf_document_finish_page(doc, page)
-
-    txt := pdf_page_text_object_create("Hola mundo desde Odin!", 72, 700, "Helvetica", 24)
-    pdf_page_text_object_set_color(txt, 0.1, 0.1, 0.8)
-    pdf_page_add_text_object(page, txt)
-
-    success := pdf_document_write_to_file(doc, "bin/output_odin.pdf")
-    if success {
-        fmt.println("PDF generado: bin/output_odin.pdf")
-    } else {
-        fmt.println("Error al generar PDF")
-    }
+		switch opcion {
+		case 1:
+			filename := cstring("SampleOdin - Blank Document.pdf")
+			if generar_documento_en_blanco(filename) {
+				fmt.println("PDF generado exitosamente: SampleOdin - Blank Document.pdf")
+			} else {
+				fmt.println("Error al generar el PDF")
+			}
+		case 0:
+			fmt.println("Saliendo...")
+			return
+		case:
+			fmt.println("Opcion invalida. Intente de nuevo.")
+		}
+		fmt.println()
+	}
 }

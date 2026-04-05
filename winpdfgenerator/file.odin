@@ -19,7 +19,8 @@ write_xref :: proc(sb: ^strings.Builder, entries: []XRef_Entry) {
 }
 
 write_trailer :: proc(sb: ^strings.Builder, size: int, root_id: int, xref_offset: i64, id0, id1: []byte) {
-    fmt.sbprintf(sb, "trailer\n<<\n  /Size %d\n  /Root %d 0 R\n  /ID [<", size + 1, root_id)
+    fmt.sbprintf(sb, "trailer\n<<\n  /Size %d\n  /Root %d 0 R\n", size + 1, root_id)
+    strings.write_string(sb, "  /ID [<")
     for b in id0 do fmt.sbprintf(sb, "%02x", b)
     strings.write_string(sb, "> <")
     for b in id1 do fmt.sbprintf(sb, "%02x", b)
