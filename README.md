@@ -17,23 +17,28 @@ PDF file generator engine, it is a class library for native PDF file generation 
 WinPdfGenerator/
 ├── winpdfgenerator/           # Biblioteca principal
 │   ├── api.odin
-│   ├── types.odin
+│   ├── core.odin
 │   ├── document.odin
-│   ├── graphics.odin
-│   ├── text_fonts.odin
-│   ├── image_xobjects.odin
-│   ├── color.odin
-│   ├── filters.odin
 │   ├── file.odin
-│   ├── interactive.odin
-│   ├── transparency.odin
+│   ├── functions.odin
+│   ├── graphics.odin
 │   ├── metadata.odin
 │   ├── signatures.odin
-│   └── encryption_security.odin
+│   ├── text_fonts.odin
+│   ├── color.odin
+│   ├── filters.odin
+│   ├── image_xobjects.odin
+│   ├── interactive.odin
+│   ├── transparency.odin
+│   ├── encryption_security.odin
+│   ├── icc_profiles.odin
+│   ├── patterns.odin
+│   └── types.odin
 ├── sample/                    # Ejemplos de uso
 │   ├── SampleOdinCLI/
-│   └── SampleCppCLI/
-└── bin/                      # Salida de compilación (.dll, .lib)
+│   ├── SampleCppCLI/
+│   └── SampleSimple/          # Ejemplo simple
+└── bin/                       # Salida de compilación (.dll, .lib)
 ```
 
 ## Build
