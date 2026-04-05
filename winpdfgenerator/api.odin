@@ -27,7 +27,6 @@ wpg_document_add_page :: proc "c" (doc: ^Pdf_Document, width, height: c.float) -
 	return core_document_add_page(doc, f32(width), f32(height))
 }
 
-@export
 wpg_metadata :: struct{
 	title, author, subject, keywords, creator, producer: cstring
 }
@@ -40,10 +39,14 @@ wpg_document_set_metadata :: proc "c" (doc: ^Pdf_Document, metadata_struct: ^wpg
 	core_document_set_metadata(doc, metadata_struct.title, metadata_struct.author, metadata_struct.subject, metadata_struct.keywords, metadata_struct.creator, metadata_struct.producer)
 }
 
+wpg_embedded_font :: struct{
+	path, alias: cstring
+}
+
 @(export)
-wpg_document_add_embedded_font :: proc "c" (doc: ^Pdf_Document, path: cstring, alias: cstring) -> c.bool {
+wpg_document_add_embedded_font :: proc "c" (doc: ^Pdf_Document, embedded_font: ^wpg_embedded_font) -> c.bool {
 	context = runtime.default_context()
-	return core_document_add_embedded_font(doc, path, alias)
+	return core_document_add_embedded_font(doc, embedded_font.path, embedded_font.alias)
 }
 
 @(export)
