@@ -1,23 +1,30 @@
+#+private
 package winpdfgenerator
 
 import "core:fmt"
-import "core:os"
+import "core:strings"
 
-write_header :: proc(h: ^os.File) {
-    fmt.fprintf(h, "%%PDF-2.0\n")
-    fmt.fprintf(h, "%%\u00E2\u00E3\u00CF\u00D3\n")
+write_header :: proc(sb: ^strings.Builder) {
+    strings.write_string(sb, "%%PDF-2.0\n")
+    strings.write_string(sb, "%%\u00E2\u00E3\u00CF\u00D3\n")
 }
 
-write_xref :: proc(h: ^os.File, entries: []XRef_Entry) {
-    fmt.fprintf(h, "xref\n0 %d\n", len(entries) + 1)
-    fmt.fprintf(h, "0000000000 65535 f \r\n")
+write_xref :: proc(sb: ^strings.Builder, entries: []XRef_Entry) {
+    fmt.sbprintf(sb, "xref\n0 %d\n", len(entries) + 1)
+    strings.write_string(sb, "0000000000 65535 f \r\n")
     for entry in entries {
-        flag := entry.in_use ? "n" : "f"
-        fmt.fprintf(h, "%010d %05d %s \r\n", entry.offset, entry.gen, flag)
+        flag := entry.in_use ? 'n' : 'f'
+        fmt.sbprintf(sb, "%010d %05d %c \r\n", entry.offset, entry.gen, flag)
     }
 }
 
-write_trailer :: proc(h: ^os.File, size: int, root_id: int, xref_offset: i64) {
-    fmt.fprintf(h, "trailer\n<< /Size %d /Root %d 0 R >>\n", size, root_id)
-    fmt.fprintf(h, "startxref\n%d\n%%%%EOF\n", xref_offset)
+write_trailer :: proc(sb: ^strings.Builder, size: int, root_id: int, xref_offset: i64, id0, id1: []byte) {
+    fmt.sbprintf(sb, "trailer\n<<\n  /Size %d\n  /Root %d 0 R\n", size + 1, root_id)
+    strings.write_string(sb, "  /ID [<")
+    for b in id0 do fmt.sbprintf(sb, "%02x", b)
+    strings.write_string(sb, "> <")
+    for b in id1 do fmt.sbprintf(sb, "%02x", b)
+    strings.write_string(sb, ">]\n>>\n")
+    fmt.sbprintf(sb, "startxref\n%d\n", xref_offset)
+    strings.write_string(sb, "%%EOF")
 }

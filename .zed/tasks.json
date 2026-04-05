@@ -1,0 +1,74 @@
+[
+  {
+    "label": "Odin: Build DLL (debug)",
+    "command": "odin build winpdfgenerator -build-mode:dll -out:bin/WinPdfGenerator.dll",
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+  {
+    "label": "Odin: Build DLL (release)",
+    "command": "odin build winpdfgenerator -build-mode:dll -out:bin/WinPdfGenerator.dll -o:speed",
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+  {
+    "label": "Odin: Check SampleSimple",
+    "command": "odin check sample/SampleSimple",
+    "allow_concurrent_runs": true,
+    "reveal": "always",
+  },
+  {
+    "label": "Odin: Build SampleSimple",
+    "command": "odin build sample/SampleSimple -out:bin/SampleSimple.exe",
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+  {
+    "label": "Odin: Run SampleSimple",
+    "command": "bin/SampleSimple.exe",
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+  {
+    "label": "Odin: Check Sample CLI",
+    "command": "odin check sample/SampleOdinCLI",
+    "allow_concurrent_runs": true,
+    "reveal": "always",
+  },
+  {
+    "label": "Odin: Build Sample CLI",
+    "command": "odin build sample/SampleOdinCLI -out:bin/SampleOdinCLI.exe",
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+  {
+    "label": "Odin: Run Sample CLI",
+    "command": "bin/SampleOdinCLI.exe",
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+  {
+    "label": "Odin: Build & Run Sample CLI",
+    "command": "odin build sample/SampleOdinCLI -out:bin/SampleOdinCLI.exe && bin/SampleOdinCLI.exe",
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+  {
+    "label": "C++: Build Sample CLI",
+    "command": "sample/SampleCppCLI/build.bat",
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+  {
+    "label": "C++: Run Sample CLI",
+    "command": "bin/SampleCppCLI.exe",
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+  {
+    "label": "C++: Build & Run Sample CLI",
+    "command": "sample/SampleCppCLI/build.bat && bin/SampleCppCLI.exe",
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+]

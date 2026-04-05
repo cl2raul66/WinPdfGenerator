@@ -1,16 +1,14 @@
-# Binarios compilados
 bin/
+out/
 
-# Caché de compilación Odin
-*.cache
-
-# PDFs de prueba
 *.pdf
+*.cache
+*.exe
+*.dll
+*.lib
+*.exp
+*.obj
 
-# Archivos del editor Zed
-.zed/
-
-# Archivos del sistema
 .DS_Store
 Thumbs.db
 nul
