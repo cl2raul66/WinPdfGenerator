@@ -32,34 +32,34 @@ core_document_write_to_file :: proc(doc: ^Pdf_Document, filename: cstring) -> c.
 }
 
 core_document_close :: proc(doc: ^Pdf_Document) {
-		if doc == nil do return
+	if doc == nil do return
 
-		for page in doc.pages {
-			for item in page.items {
-				#partial switch v in item.data {
-				case Pdf_Page_Text_Object:
-					delete(v.text)
-					delete(v.font_name)
-				case Pdf_Page_Image_Object:
-					delete(v.image_path)
-				}
+	for page in doc.pages {
+		for item in page.items {
+			#partial switch v in item.data {
+			case Pdf_Page_Text_Object:
+				delete(v.text)
+				delete(v.font_name)
+			case Pdf_Page_Image_Object:
+				delete(v.image_path)
 			}
-			delete(page.items)
-			delete(page.annotations)
-			free(page)
 		}
-		delete(doc.pages)
+		delete(page.items)
+		delete(page.annotations)
+		free(page)
+	}
+	delete(doc.pages)
 
-		for key, emb in doc.embedded_fonts {
-			delete(emb.ttf_data)
-		}
-		delete(doc.embedded_fonts)
+	for key, emb in doc.embedded_fonts {
+		delete(emb.ttf_data)
+	}
+	delete(doc.embedded_fonts)
 
-		delete(doc.objects)
-		delete(doc.sig_fields)
-		delete(doc.xref_table)
+	delete(doc.objects)
+	delete(doc.sig_fields)
+	delete(doc.xref_table)
 
-		free(doc)
+	free(doc)
 }
 
 core_document_add_page :: proc(doc: ^Pdf_Document, width, height: f32) -> ^Pdf_Page {
@@ -151,21 +151,30 @@ core_page_add_image :: proc(page: ^Pdf_Page, path: cstring, x, y, width, height:
 	append(&page.items, Content_Item{data = img})
 }
 
-core_document_set_metadata :: proc(doc: ^Pdf_Document, title, author, subject, keywords, creator, producer: cstring) {
+core_document_set_metadata :: proc(doc: ^Pdf_Document, title, author, subject, keywords, creator, producer, creation_date, mod_date: cstring) {
 	if doc == nil do return
-	if doc.metadata_info.title != ""    do delete(doc.metadata_info.title)
-	if doc.metadata_info.author != ""   do delete(doc.metadata_info.author)
-	if doc.metadata_info.subject != ""  do delete(doc.metadata_info.subject)
-	if doc.metadata_info.keywords != "" do delete(doc.metadata_info.keywords)
-	if doc.metadata_info.creator != ""  do delete(doc.metadata_info.creator)
-	if doc.metadata_info.producer != "" do delete(doc.metadata_info.producer)
+	if doc.metadata_info.title         != "" do delete(doc.metadata_info.title)
+	if doc.metadata_info.author        != "" do delete(doc.metadata_info.author)
+	if doc.metadata_info.subject       != "" do delete(doc.metadata_info.subject)
+	if doc.metadata_info.keywords      != "" do delete(doc.metadata_info.keywords)
+	if doc.metadata_info.creator       != "" do delete(doc.metadata_info.creator)
+	if doc.metadata_info.producer      != "" do delete(doc.metadata_info.producer)
+	if doc.metadata_info.creation_date != "" do delete(doc.metadata_info.creation_date)
+	if doc.metadata_info.mod_date      != "" do delete(doc.metadata_info.mod_date)
 
-	if title != nil    do doc.metadata_info.title    = strings.clone_from_cstring(title)
-	if author != nil   do doc.metadata_info.author   = strings.clone_from_cstring(author)
-	if subject != nil  do doc.metadata_info.subject  = strings.clone_from_cstring(subject)
+	if title    != nil do doc.metadata_info.title    = strings.clone_from_cstring(title)
+	if author   != nil do doc.metadata_info.author   = strings.clone_from_cstring(author)
+	if subject  != nil do doc.metadata_info.subject  = strings.clone_from_cstring(subject)
 	if keywords != nil do doc.metadata_info.keywords = strings.clone_from_cstring(keywords)
-	if creator != nil  do doc.metadata_info.creator  = strings.clone_from_cstring(creator)
+	if creator  != nil do doc.metadata_info.creator  = strings.clone_from_cstring(creator)
 	if producer != nil do doc.metadata_info.producer = strings.clone_from_cstring(producer)
+
+	if creation_date != nil && len(string(creation_date)) > 0 {
+		doc.metadata_info.creation_date = strings.clone_from_cstring(creation_date)
+	}
+	if mod_date != nil && len(string(mod_date)) > 0 {
+		doc.metadata_info.mod_date = strings.clone_from_cstring(mod_date)
+	}
 }
 
 Image_Resource :: struct {
@@ -182,6 +191,86 @@ Image_Resource :: struct {
 Page_Resources :: struct {
 	font_map: map[string]string,
 	images:   [dynamic]Image_Resource,
+}
+
+System_Font_Metrics :: struct {
+	bbox:         [4]int,
+	ascent:       int,
+	descent:      int,
+	cap_height:   int,
+	stem_v:       int,
+	flags:        int,
+	italic_angle: int,
+}
+
+HELVETICA_WIDTHS :: [224]int{
+	278, 278, 355, 556, 556, 889, 667, 222, 333, 333, 389, 584, 278, 333, 278, 278,
+	556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556,
+	1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
+	667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556,
+	222, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,
+	556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584, 278,
+	556, 278, 222, 556, 333, 1000, 556, 556, 278, 1000, 667, 333, 1000, 278, 500, 667,
+	278, 278, 222, 222, 333, 333, 350, 556, 1000, 222, 1000, 500, 333, 944, 278, 500,
+	278, 333, 556, 556, 556, 556, 260, 556, 333, 737, 370, 556, 584, 333, 737, 333,
+	400, 584, 333, 333, 333, 556, 537, 278, 333, 333, 365, 556, 834, 834, 834, 611,
+	667, 667, 667, 667, 667, 667, 1000, 722, 667, 667, 667, 667, 278, 278, 278, 278,
+	722, 722, 778, 778, 778, 778, 778, 584, 778, 722, 722, 722, 722, 667, 667, 611,
+	556, 556, 556, 556, 556, 556, 889, 500, 556, 556, 556, 556, 278, 278, 278, 278,
+	556, 556, 556, 556, 556, 556, 556, 584, 611, 556, 556, 556, 556, 500, 556, 500,
+}
+
+get_type1_metrics :: proc(font_name: string) -> System_Font_Metrics {
+	switch font_name {
+	case "Helvetica", "Helvetica-Bold", "Helvetica-Oblique", "Helvetica-BoldOblique":
+		return {bbox = {-166, -225, 1000, 931}, ascent = 718,  descent = -207, cap_height = 718, stem_v = 88, flags = 32, italic_angle = 0}
+	case "Times-Roman", "Times-Bold", "Times-Italic", "Times-BoldItalic":
+		return {bbox = {-168, -218, 1000, 898}, ascent = 683,  descent = -217, cap_height = 662, stem_v = 84, flags = 34, italic_angle = 0}
+	case "Courier", "Courier-Bold", "Courier-Oblique", "Courier-BoldOblique":
+		return {bbox = {-23,  -250,  715,  805}, ascent = 629, descent = -157, cap_height = 562, stem_v = 51, flags = 33, italic_angle = 0}
+	case:
+		return {bbox = {-100, -200, 1000, 900}, ascent = 800,  descent = -200, cap_height = 700, stem_v = 80, flags = 32, italic_angle = 0}
+	}
+}
+
+write_font_widths :: proc(sb: ^strings.Builder, font_name: string) {
+	strings.write_string(sb, "[")
+	switch font_name {
+	case "Helvetica", "Helvetica-Bold", "Helvetica-Oblique", "Helvetica-BoldOblique":
+		for w in HELVETICA_WIDTHS {
+			fmt.sbprintf(sb, "%d ", w)
+		}
+	case:
+		for _ in 0..<224 {
+			strings.write_string(sb, "600 ")
+		}
+	}
+	strings.write_string(sb, "]")
+}
+
+write_type1_font_resource :: proc(sb: ^strings.Builder, alias, ps_name, orig_name: string) {
+	m := get_type1_metrics(orig_name)
+	fmt.sbprintf(sb,
+		"/%s << /Type /Font /Subtype /Type1 /BaseFont /%s /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 255 /Widths ",
+		alias, ps_name)
+	write_font_widths(sb, orig_name)
+	fmt.sbprintf(sb,
+		" /FontDescriptor << /Type /FontDescriptor /FontName /%s /Flags %d /FontBBox [%d %d %d %d] /ItalicAngle %d /Ascent %d /Descent %d /CapHeight %d /StemV %d >> >> ",
+		ps_name, m.flags,
+		m.bbox[0], m.bbox[1], m.bbox[2], m.bbox[3],
+		m.italic_angle, m.ascent, m.descent, m.cap_height, m.stem_v,
+	)
+}
+
+write_truetype_font_resource :: proc(sb: ^strings.Builder, alias, ps_name: string) {
+	fmt.sbprintf(sb,
+		"/%s << /Type /Font /Subtype /TrueType /BaseFont /%s /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 255 /Widths ",
+		alias, ps_name)
+	write_font_widths(sb, "")
+	fmt.sbprintf(sb,
+		" /FontDescriptor << /Type /FontDescriptor /FontName /%s /Flags 32 /FontBBox [-100 -200 1000 900] /ItalicAngle 0 /Ascent 800 /Descent -200 /CapHeight 800 /StemV 80 >> >> ",
+		ps_name,
+	)
 }
 
 serialize_document :: proc(doc: ^Pdf_Document, filename: string) -> bool {
@@ -249,7 +338,6 @@ serialize_document :: proc(doc: ^Pdf_Document, filename: string) -> bool {
 						img_res.obj_id = next_id
 						next_id += 1
 					} else if channels == 2 || channels == 4 {
-						// Separar RGB/Gray y Alpha
 						color_ch := int(channels) - 1
 						img_res.rgb_data = make([]byte, pixels * color_ch)
 						img_res.alpha_data = make([]byte, pixels)
@@ -332,21 +420,21 @@ serialize_document :: proc(doc: ^Pdf_Document, filename: string) -> bool {
 					fmt.sbprintf(&frsb, "/%s %d 0 R ", alias, emb.font_obj_id)
 				} else {
 					ps_name, _ := strings.replace_all(fname, " ", "")
-					if fname == "Helvetica" || fname == "Times-Roman" || fname == "Courier" {
-						fmt.sbprintf(
-							&frsb,
-							"/%s << /Type /Font /Subtype /Type1 /BaseFont /%s /Encoding /WinAnsiEncoding >> ",
-							alias,
-							ps_name,
-						)
+					is_type1 :=
+						fname == "Helvetica"             || fname == "Helvetica-Bold"       ||
+						fname == "Helvetica-Oblique"     || fname == "Helvetica-BoldOblique" ||
+						fname == "Times-Roman"           || fname == "Times-Bold"            ||
+						fname == "Times-Italic"          || fname == "Times-BoldItalic"      ||
+						fname == "Courier"               || fname == "Courier-Bold"          ||
+						fname == "Courier-Oblique"       || fname == "Courier-BoldOblique"   ||
+						fname == "Symbol"                || fname == "ZapfDingbats"
+
+					if is_type1 {
+						write_type1_font_resource(&frsb, alias, ps_name, fname)
 					} else {
-						fmt.sbprintf(
-							&frsb,
-							"/%s << /Type /Font /Subtype /TrueType /BaseFont /%s /Encoding /WinAnsiEncoding >> ",
-							alias,
-							ps_name,
-						)
+						write_truetype_font_resource(&frsb, alias, ps_name)
 					}
+
 					delete(ps_name)
 				}
 			}
@@ -365,7 +453,7 @@ serialize_document :: proc(doc: ^Pdf_Document, filename: string) -> bool {
 		strings.builder_destroy(&frsb)
 	}
 
-	 metadata_id := next_id; next_id += 1
+	metadata_id := next_id; next_id += 1
 
 	total := next_id - 1
 	offsets := make([]i64, total)
@@ -423,46 +511,44 @@ serialize_document :: proc(doc: ^Pdf_Document, filename: string) -> bool {
 	for pr in page_res {
 		for img in pr.images {
 			if img.smask_id != 0 {
+				comp_alpha, _ := filter_apply_flate(img.alpha_data)
+				use_alpha_flate := len(comp_alpha) < len(img.alpha_data)
+				alpha_payload := use_alpha_flate ? comp_alpha : img.alpha_data
+
 				offsets[img.smask_id - 1] = i64(strings.builder_len(sb))
-				fmt.sbprintf(
-					&sb,
-					"%d 0 obj\n<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceGray /BitsPerComponent 8 /Length %d >>\nstream\n",
-					img.smask_id,
-					img.width,
-					img.height,
-					len(img.alpha_data),
-				)
-				strings.write_bytes(&sb, img.alpha_data)
+				hdr := strings.builder_make()
+				fmt.sbprintf(&hdr,
+					"%d 0 obj\n<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceGray /BitsPerComponent 8",
+					img.smask_id, img.width, img.height)
+				if use_alpha_flate { strings.write_string(&hdr, " /Filter /FlateDecode") }
+				fmt.sbprintf(&hdr, " /Length %d >>\nstream\n", len(alpha_payload))
+				strings.write_string(&sb, strings.to_string(hdr))
+				strings.builder_destroy(&hdr)
+
+				strings.write_bytes(&sb, alpha_payload)
 				strings.write_string(&sb, "\nendstream\nendobj\n")
+				delete(comp_alpha)
 			}
 
-			offsets[img.obj_id - 1] = i64(strings.builder_len(sb))
+			comp_rgb, _ := filter_apply_flate(img.rgb_data)
+			use_rgb_flate := len(comp_rgb) < len(img.rgb_data)
+			rgb_payload := use_rgb_flate ? comp_rgb : img.rgb_data
 			color_space := img.channels == 1 || img.channels == 2 ? "/DeviceGray" : "/DeviceRGB"
 
-			if img.smask_id != 0 {
-				fmt.sbprintf(
-					&sb,
-					"%d 0 obj\n<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace %s /BitsPerComponent 8 /SMask %d 0 R /Length %d >>\nstream\n",
-					img.obj_id,
-					img.width,
-					img.height,
-					color_space,
-					img.smask_id,
-					len(img.rgb_data),
-				)
-			} else {
-				fmt.sbprintf(
-					&sb,
-					"%d 0 obj\n<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace %s /BitsPerComponent 8 /Length %d >>\nstream\n",
-					img.obj_id,
-					img.width,
-					img.height,
-					color_space,
-					len(img.rgb_data),
-				)
-			}
-			strings.write_bytes(&sb, img.rgb_data)
+			offsets[img.obj_id - 1] = i64(strings.builder_len(sb))
+			hdr := strings.builder_make()
+			fmt.sbprintf(&hdr,
+				"%d 0 obj\n<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace %s /BitsPerComponent 8",
+				img.obj_id, img.width, img.height, color_space)
+			if use_rgb_flate   { strings.write_string(&hdr, " /Filter /FlateDecode") }
+			if img.smask_id != 0 { fmt.sbprintf(&hdr, " /SMask %d 0 R", img.smask_id) }
+			fmt.sbprintf(&hdr, " /Length %d >>\nstream\n", len(rgb_payload))
+			strings.write_string(&sb, strings.to_string(hdr))
+			strings.builder_destroy(&hdr)
+
+			strings.write_bytes(&sb, rgb_payload)
 			strings.write_string(&sb, "\nendstream\nendobj\n")
+			delete(comp_rgb)
 		}
 	}
 
@@ -522,7 +608,7 @@ serialize_document :: proc(doc: ^Pdf_Document, filename: string) -> bool {
 	}
 
 	offsets[metadata_id - 1] = i64(strings.builder_len(sb))
-    write_xmp_object(&sb, metadata_id, doc.metadata_info)
+	write_xmp_object(&sb, metadata_id, doc.metadata_info)
 
 	xref_offset := i64(strings.builder_len(sb))
 
