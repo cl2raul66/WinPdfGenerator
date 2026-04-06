@@ -5,7 +5,7 @@ import "core:fmt"
 import "core:strings"
 
 write_header :: proc(sb: ^strings.Builder) {
-    strings.write_string(sb, "%%PDF-2.0\n")
+    strings.write_string(sb, "%PDF-2.0\n")
     strings.write_string(sb, "%%\u00E2\u00E3\u00CF\u00D3\n")
 }
 
