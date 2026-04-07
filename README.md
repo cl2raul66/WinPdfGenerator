@@ -2,14 +2,20 @@
 
 PDF file generator engine, it is a class library for native PDF file generation in Windows, written in Odin.
 
+## Ideología
+
+- Motor de escritura de codigo PDF.
+- No visualiza PDFs.
+- No edita o modifica PDFs existentes.
+- No gestiona el desbordamiento en las dimensiones de página (no paginación automática).
+- No maneja contenido dinámico o interactivo (formularios, links, etc.) — solo generación estática.
+
 ## Características
 
-- Genera documentos PDFs conformes a las especificaciones
-- Biblioteca dinámica (DLL) para consumo desde cualquier lenguaje nativo de Windows
-- API C-compatible con convención `cdecl`
-- Sin dependencias externas - implementación pura en Odin
-- Soporta: texto con fuentes, paths (líneas/curvas), imágenes y anotaciones
-- Para futuro: formularios y links
+- Genera documentos PDFs conformes a las especificaciones.
+- Biblioteca dinámica (DLL) para consumo desde cualquier lenguaje nativo de Windows.
+- API C-compatible para máxima interoperabilidad.
+- Implementación pura en Odin y sus paquetes oficiales (Base Library, Core Library y Vendor Library).
 
 ## Estructura del Proyecto
 
