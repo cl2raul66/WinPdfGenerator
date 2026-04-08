@@ -21,30 +21,32 @@ PDF file generator engine, it is a class library for native PDF file generation 
 
 ```
 WinPdfGenerator/
-├── winpdfgenerator/           # Biblioteca principal
-│   ├── api.odin
-│   ├── core.odin
-│   ├── document.odin
-│   ├── file.odin
-│   ├── functions.odin
-│   ├── graphics.odin
-│   ├── metadata.odin
-│   ├── signatures.odin
-│   ├── text_fonts.odin
-│   ├── color.odin
-│   ├── filters.odin
-│   ├── image_xobjects.odin
-│   ├── interactive.odin
-│   ├── transparency.odin
-│   ├── encryption_security.odin
-│   ├── icc_profiles.odin
-│   ├── patterns.odin
-│   └── types.odin
-├── sample/                    # Ejemplos de uso
+├── winpdfgenerator/                # Biblioteca principal
+│   ├── api.odin                    # API pública de la biblioteca
+│   ├── core.odin                   # Núcleo del motor de escritura PDF
+│   ├── document.odin               # Gestión del documento PDF
+│   ├── file.odin                   # Escritura del archivo PDF
+│   ├── functions.odin              # Funciones de operadores PDF
+│   ├── graphics.odin               # Operadores gráficos
+│   ├── metadata.odin               # Metadatos del documento
+│   ├── signatures.odin             # Firmas digitales
+│   ├── text_fonts.odin             # Texto y fuentes
+│   ├── color.odin                  # Definición de colores
+│   ├── filters.odin                # Filtros de compresión
+│   ├── image_xobjects.odin         # Imágenes y objetos externos
+│   ├── interactive.odin            # Elementos interactivos
+│   ├── transparency.odin           # Transparencia
+│   ├── encryption_security.odin    # Cifrado y seguridad
+│   ├── icc_profiles.odin           # Perfiles de color ICC
+│   ├── patterns.odin               # Patrones de relleno
+│   ├── xref_stream.odin            # Tabla de referencias cruzadas
+│   ├── object_stream.odin          # Flujos de objetos comprimidos
+│   └── types.odin                  # Definiciones de tipos
+├── sample/                         # Ejemplos de uso
+│   ├── SampleSimple/
 │   ├── SampleOdinCLI/
-│   ├── SampleCppCLI/
-│   └── SampleSimple/          # Ejemplo simple
-└── bin/                       # Salida de compilación (.dll, .lib)
+│   └── SampleCppCLI/
+└── bin/                            # Salida de compilación (.dll, .lib)
 ```
 
 ## Build
