@@ -17,9 +17,7 @@ WINANSI_TO_UNICODE := [128]rune {
 core_document_create :: proc() -> ^Pdf_Document {
 	doc := new(Pdf_Document)
 	doc.pages = make([dynamic]^Pdf_Page)
-	doc.objects = make([dynamic]Pdf_Object_Entry)
 	doc.sig_fields = make([dynamic]^Sig_Field)
-	doc.xref_table = make([dynamic]XRef_Entry)
 	doc.embedded_fonts = make(map[string]Embedded_Font)
 	doc.file_id[0] = generate_file_id("seed_1")
 	doc.file_id[1] = generate_file_id("seed_2")
@@ -51,9 +49,8 @@ core_document_close :: proc(doc: ^Pdf_Document) {
 	delete(doc.pages)
 	for _, emb in doc.embedded_fonts { delete(emb.ttf_data) }
 	delete(doc.embedded_fonts)
-	delete(doc.objects)
+	for sf in doc.sig_fields { free(sf) }
 	delete(doc.sig_fields)
-	delete(doc.xref_table)
 	free(doc)
 }
 
@@ -73,7 +70,7 @@ core_document_add_embedded_font :: proc(doc: ^Pdf_Document, path: cstring, alias
 
 	ttf_data, _ := os.read_entire_file(string(path), context.allocator)
 	if len(ttf_data) == 0 {
-		fmt.printf("[WinPdfGenerator] ERROR: No se pudo cargar la fuente incrustada en la ruta: %s\n", string(path))
+		fmt.printf("[WinPdfGenerator] ERROR: No se pudo cargar la fuente: %s\n", string(path))
 		return false
 	}
 
@@ -94,7 +91,7 @@ core_document_add_embedded_font :: proc(doc: ^Pdf_Document, path: cstring, alias
 	emb: Embedded_Font
 	emb.alias = strings.clone(alias_str)
 	emb.ttf_data = ttf_data
-	emb.ascent = f32(ascent)  * scale
+	emb.ascent = f32(ascent) * scale
 	emb.descent = f32(descent) * scale
 	emb.bbox = Rect{f32(x0) * scale, f32(y0) * scale, f32(x1) * scale, f32(y1) * scale}
 	emb.cap_height = emb.ascent
@@ -147,18 +144,37 @@ core_document_set_metadata :: proc(doc: ^Pdf_Document, title, author, subject, k
 	if doc.metadata_info.producer != "" do delete(doc.metadata_info.producer)
 	if doc.metadata_info.creation_date != "" do delete(doc.metadata_info.creation_date)
 	if doc.metadata_info.mod_date != "" do delete(doc.metadata_info.mod_date)
-	if title != nil do doc.metadata_info.title         = strings.clone_from_cstring(title)
-	if author != nil do doc.metadata_info.author        = strings.clone_from_cstring(author)
-	if subject != nil do doc.metadata_info.subject       = strings.clone_from_cstring(subject)
-	if keywords != nil do doc.metadata_info.keywords      = strings.clone_from_cstring(keywords)
-	if creator != nil do doc.metadata_info.creator       = strings.clone_from_cstring(creator)
-	if producer != nil do doc.metadata_info.producer      = strings.clone_from_cstring(producer)
+	if title != nil do doc.metadata_info.title = strings.clone_from_cstring(title)
+	if author != nil do doc.metadata_info.author = strings.clone_from_cstring(author)
+	if subject != nil do doc.metadata_info.subject = strings.clone_from_cstring(subject)
+	if keywords != nil do doc.metadata_info.keywords = strings.clone_from_cstring(keywords)
+	if creator != nil do doc.metadata_info.creator = strings.clone_from_cstring(creator)
+	if producer != nil do doc.metadata_info.producer = strings.clone_from_cstring(producer)
 	if creation_date != nil && len(string(creation_date)) > 0 {
 		doc.metadata_info.creation_date = strings.clone_from_cstring(creation_date)
 	}
 	if mod_date != nil && len(string(mod_date)) > 0 {
 		doc.metadata_info.mod_date = strings.clone_from_cstring(mod_date)
 	}
+}
+
+// Añade un campo de firma al documento a partir de la estructura pública wpg_sig_field.
+core_document_add_sig_field :: proc(doc: ^Pdf_Document, field: ^wpg_sig_field) -> bool {
+	if doc == nil || field == nil do return false
+
+	sf := new(Sig_Field)
+	sf.page = int(field.page)
+	sf.rect = Rect{
+		f32(field.rect_llx), f32(field.rect_lly),
+		f32(field.rect_urx), f32(field.rect_ury),
+	}
+	sf.sub_filter = .PKCS7_Detached
+	sf.reason = field.reason != nil ? string(field.reason)   : ""
+	sf.location = field.location != nil ? string(field.location) : ""
+	sf.contact = field.contact  != nil ? string(field.contact)  : ""
+	sf.reserved_size = int(field.reserved_size)
+	append(&doc.sig_fields, sf)
+	return true
 }
 
 // ── Tipos de recursos de página ───────────────────────────────
@@ -217,9 +233,17 @@ write_type1_font_resource :: proc(sb: ^strings.Builder, alias, ps_name, orig_nam
 	write_font_widths(sb, orig_name)
 	fmt.sbprintf(sb,
 		" /FontDescriptor << /Type /FontDescriptor /FontName /%s /Flags %d /FontBBox [%d %d %d %d] /ItalicAngle %d /Ascent %d /Descent %d /CapHeight %d /StemV %d >> >> ",
-		ps_name, m.flags,
-		m.bbox[0], m.bbox[1], m.bbox[2], m.bbox[3],
-		m.italic_angle, m.ascent, m.descent, m.cap_height, m.stem_v,
+		ps_name,
+		i64(m.flags),
+		m.bbox[0],
+		m.bbox[1],
+		m.bbox[2],
+		m.bbox[3],
+		m.italic_angle,
+		m.ascent,
+		m.descent,
+		m.cap_height,
+		m.stem_v,
 	)
 }
 
@@ -236,8 +260,6 @@ write_truetype_font_resource :: proc(sb: ^strings.Builder, alias, ps_name: strin
 
 // ── Tipos del pipeline ────────────────────────────────────────
 
-// Rol semántico de cada objeto indirecto.
-// ObjStm: los propios objetos contenedores (siempre directos, nunca anidados).
 Object_Role :: enum {
 	Catalog,
 	Pages_Tree,
@@ -250,21 +272,28 @@ Object_Role :: enum {
 	Font_Descriptor,
 	Font_Dict,
 	Metadata,
+	Encrypt_Dict,
+	Sig_Value, // objeto /Sig (contiene ByteRange/Contents) — siempre directo
+	Sig_Widget, // anotación /Widget — siempre directo
+	Sig_AcroForm, // /AcroForm — elegible para ObjStm
 	ObjStm,
 }
 
-// Descriptor de un objeto indirecto en el plan.
-// objstm_idx: índice en plan.objstm_ids (-1 si es objeto directo).
 Obj_Descriptor :: struct {
-	id:        int,
-	role:      Object_Role,
+	id: int,
+	role: Object_Role,
 	in_objstm: bool,
 	objstm_idx: int,
 }
 
-// IDs de los cuatro sub-objetos de cada fuente embebida.
 Embedded_Font_Ids :: struct {
 	file_id, widths_id,	desc_id, font_id: int,
+}
+
+// IDs de los objetos de firma por campo.
+Sig_Field_Ids :: struct {
+	sig_value_id, widget_id: int,
+	placeholder:  Sig_Placeholder, // rellenado en render
 }
 
 Page_Data :: struct {
@@ -272,11 +301,11 @@ Page_Data :: struct {
 	content_str: string,
 }
 
-// Plan completo de serialización.
-// total_ids = ID más alto asignado; se fija en serialize_document tras classify.
 Render_Plan :: struct {
-	catalog_id,	pages_id, metadata_id, xref_stream_id: int,
+	catalog_id,	pages_id, metadata_id, encrypt_id, acroform_id, // 0 = sin campos de firma
+	xref_stream_id: int,
 	page_ids, content_ids, objstm_ids: []int,
+	sig_ids: []Sig_Field_Ids,
 	page_data: []Page_Data,
 	emb_ids: map[string]Embedded_Font_Ids,
 	objects: [dynamic]Obj_Descriptor,
@@ -303,9 +332,7 @@ render_plan_destroy :: proc(plan: ^Render_Plan) {
 	delete(plan.objects)
 }
 
-// ── Predicado de elegibilidad para ObjStm ────────────────────
-// Excluidos (ISO 32000-2 §7.5.7): streams, gen≠0, diccionario de cifrado.
-// En archivos no linealizados se permiten: Catalog, Pages_Tree, Page, dicts de fuente.
+// ── Predicado ObjStm ─────────────────────────────────────────
 
 @(private)
 is_objstm_eligible :: proc(role: Object_Role) -> bool {
@@ -335,7 +362,6 @@ pipeline_collect :: proc(doc: ^Pdf_Document) -> (page_data: []Page_Data, ok: boo
 					pr.font_map[v.font_name] = fmt.aprintf("F%d", font_alias_num)
 					font_alias_num += 1
 				}
-
 			case Pdf_Page_Image_Object:
 				c_path, _ := strings.clone_to_cstring(v.image_path)
 				defer delete(c_path)
@@ -375,7 +401,6 @@ pipeline_collect :: proc(doc: ^Pdf_Document) -> (page_data: []Page_Data, ok: boo
 			}
 		}
 
-		// Content stream
 		csb := strings.builder_make()
 		img_idx := 0
 		for item in page.items {
@@ -410,9 +435,6 @@ pipeline_collect :: proc(doc: ^Pdf_Document) -> (page_data: []Page_Data, ok: boo
 }
 
 // ── Etapa 2: Classify ─────────────────────────────────────────
-// Marca objetos elegibles como in_objstm y asigna IDs a los ObjStm contenedores.
-// next_id se actualiza para que serialize_document pueda continuar asignando
-// (xref_stream_id se asigna allí después de classify).
 
 pipeline_classify :: proc(plan: ^Render_Plan, next_id: ^int) {
 	eligible_count := 0
@@ -446,13 +468,11 @@ pipeline_classify :: proc(plan: ^Render_Plan, next_id: ^int) {
 }
 
 // ── Etapa 3: Assign ───────────────────────────────────────────
-// Asigna IDs a todos los objetos salvo ObjStm (esos los asigna classify)
-// y el XRef Stream (lo asigna serialize_document).
-// Devuelve el plan y next_id para que las etapas siguientes continúen.
 
 pipeline_assign :: proc(doc: ^Pdf_Document, page_data: []Page_Data) -> (plan: Render_Plan, next_id: int) {
 	n := len(doc.pages)
-	next_id  = 1
+	ns := len(doc.sig_fields)
+	next_id = 1
 
 	plan.page_ids = make([]int, n)
 	plan.content_ids = make([]int, n)
@@ -505,11 +525,30 @@ pipeline_assign :: proc(doc: ^Pdf_Document, page_data: []Page_Data) -> (plan: Re
 	plan.metadata_id = next_id; next_id += 1
 	append(&plan.objects, Obj_Descriptor{id = plan.metadata_id, role = .Metadata})
 
+	plan.sig_ids = make([]Sig_Field_Ids, ns)
+
+	// Campos de firma: /Sig + /Widget por campo; /AcroForm compartido
+	if ns > 0 {
+		for i in 0 ..< ns {
+			plan.sig_ids[i].sig_value_id = next_id;
+			next_id += 1
+			append(&plan.objects, Obj_Descriptor{id = plan.sig_ids[i].sig_value_id, role = .Sig_Value})
+
+			plan.sig_ids[i].widget_id = next_id; next_id += 1
+			append(&plan.objects, Obj_Descriptor{id = plan.sig_ids[i].widget_id, role = .Sig_Widget})
+		}
+
+		plan.acroform_id = next_id; next_id += 1
+		append(&plan.objects, Obj_Descriptor{id = plan.acroform_id, role = .Sig_AcroForm})
+	}
+
+	plan.encrypt_id  = 0
+	plan.acroform_id = plan.acroform_id // ya asignado arriba si ns > 0
+
 	return
 }
 
-// ── Helpers de serialización de valores (sin obj/endobj) ─────
-// Usados tanto para objetos directos como para ObjStm.
+// ── Helpers de serialización ──────────────────────────────────
 
 @(private)
 build_page_resource_string :: proc(pr: ^Page_Resources, plan: ^Render_Plan) -> string {
@@ -554,24 +593,24 @@ build_page_resource_string :: proc(pr: ^Page_Resources, plan: ^Render_Plan) -> s
 	return strings.clone(strings.to_string(frsb))
 }
 
-// Serializa el valor de un objeto no-stream a un string (sin obj/endobj).
-// El caller debe delete el resultado.
 @(private)
-serialize_non_stream_value :: proc(obj_id: int, plan: ^Render_Plan, doc: ^Pdf_Document,
-	// contexto adicional según el role del objeto
-	page_idx: int,       // para Page (-1 si no aplica)
-	emb_font_key: string,    // para Font_* ("" si no aplica)
+serialize_non_stream_value :: proc(obj_id: int, plan: ^Render_Plan, doc: ^Pdf_Document,	page_idx: int, emb_font_key: string,
 ) -> string {
 	tmp := strings.builder_make()
 	defer strings.builder_destroy(&tmp)
 
 	switch {
-	// ── Catálogo ──
 	case obj_id == plan.catalog_id:
-		fmt.sbprintf(&tmp, "<< /Type /Catalog /Pages %d 0 R /Metadata %d 0 R >>",
-			plan.pages_id, plan.metadata_id)
+		if plan.acroform_id > 0 {
+			fmt.sbprintf(&tmp,
+				"<< /Type /Catalog /Pages %d 0 R /Metadata %d 0 R /AcroForm %d 0 R >>",
+				plan.pages_id, plan.metadata_id, plan.acroform_id)
+		} else {
+			fmt.sbprintf(&tmp,
+				"<< /Type /Catalog /Pages %d 0 R /Metadata %d 0 R >>",
+				plan.pages_id, plan.metadata_id)
+		}
 
-	// ── Árbol de páginas ──
 	case obj_id == plan.pages_id:
 		kids_sb := strings.builder_make()
 		defer strings.builder_destroy(&kids_sb)
@@ -579,27 +618,51 @@ serialize_non_stream_value :: proc(obj_id: int, plan: ^Render_Plan, doc: ^Pdf_Do
 		fmt.sbprintf(&tmp, "<< /Type /Pages /Count %d /Kids [%s] >>",
 			len(plan.page_ids), strings.to_string(kids_sb))
 
-	// ── Diccionario de página ──
 	case page_idx >= 0 && page_idx < len(doc.pages):
 		page := doc.pages[page_idx]
 		pr := &plan.page_data[page_idx].resources
 		cid := plan.content_ids[page_idx]
 		res := build_page_resource_string(pr, plan)
 		defer delete(res)
-		fmt.sbprintf(&tmp,
-			"<< /Type /Page /Parent %d 0 R /MediaBox [%.4f %.4f %.4f %.4f] /Contents %d 0 R /Resources << %s>> >>",
-			plan.pages_id,
-			page.media_box.llx, page.media_box.lly, page.media_box.urx, page.media_box.ury,
-			cid, res)
 
-	// ── Font_Widths ──
+		// Añadir anotaciones de firma en la página correspondiente
+		annots_sb := strings.builder_make()
+		defer strings.builder_destroy(&annots_sb)
+		for i in 0 ..< len(doc.sig_fields) {
+			sf := doc.sig_fields[i]
+			if sf.page == page_idx {
+				fmt.sbprintf(&annots_sb, "%d 0 R ", plan.sig_ids[i].widget_id)
+			}
+		}
+		annots_str := strings.to_string(annots_sb)
+		if len(annots_str) > 0 {
+			fmt.sbprintf(&tmp,
+				"<< /Type /Page /Parent %d 0 R /MediaBox [%.4f %.4f %.4f %.4f] /Contents %d 0 R /Resources << %s>> /Annots [%s] >>",
+				plan.pages_id,
+				page.media_box.llx, page.media_box.lly, page.media_box.urx, page.media_box.ury,
+				cid, res, annots_str)
+		} else {
+			fmt.sbprintf(&tmp,
+				"<< /Type /Page /Parent %d 0 R /MediaBox [%.4f %.4f %.4f %.4f] /Contents %d 0 R /Resources << %s>> >>",
+				plan.pages_id,
+				page.media_box.llx, page.media_box.lly, page.media_box.urx, page.media_box.ury,
+				cid, res)
+		}
+
+	case obj_id == plan.acroform_id:
+		widget_sb := strings.builder_make()
+		defer strings.builder_destroy(&widget_sb)
+		for sid in plan.sig_ids {
+			fmt.sbprintf(&widget_sb, "%d 0 R ", sid.widget_id)
+		}
+		fmt.sbprintf(&tmp, "<< /Fields [%s] /SigFlags 3 >>", strings.to_string(widget_sb))
+
 	case emb_font_key != "" && obj_id == plan.emb_ids[emb_font_key].widths_id:
 		emb := doc.embedded_fonts[emb_font_key]
 		strings.write_string(&tmp, "[ ")
 		for i in 32 ..= 255 { fmt.sbprintf(&tmp, "%.0f ", emb.widths[i]) }
 		strings.write_string(&tmp, "]")
 
-	// ── Font_Descriptor ──
 	case emb_font_key != "" && obj_id == plan.emb_ids[emb_font_key].desc_id:
 		emb := doc.embedded_fonts[emb_font_key]
 		ids := plan.emb_ids[emb_font_key]
@@ -614,7 +677,6 @@ serialize_non_stream_value :: proc(obj_id: int, plan: ^Render_Plan, doc: ^Pdf_Do
 			emb.italic_angle, emb.ascent, emb.descent, emb.cap_height, emb.stem_v,
 			ids.file_id)
 
-	// ── Font_Dict ──
 	case emb_font_key != "" && obj_id == plan.emb_ids[emb_font_key].font_id:
 		emb := doc.embedded_fonts[emb_font_key]
 		ids := plan.emb_ids[emb_font_key]
@@ -630,7 +692,6 @@ serialize_non_stream_value :: proc(obj_id: int, plan: ^Render_Plan, doc: ^Pdf_Do
 	return strings.clone(strings.to_string(tmp))
 }
 
-// Enruta un objeto no-stream: lo añade al ObjStm o lo escribe directamente.
 @(private)
 route_non_stream :: proc(obj_id: int, val: string, desc: Obj_Descriptor, sb: ^strings.Builder, builders: []ObjStm_Builder, records: []Xref_Record,
 ) {
@@ -644,24 +705,18 @@ route_non_stream :: proc(obj_id: int, val: string, desc: Obj_Descriptor, sb: ^st
 }
 
 // ── Etapa 4: Render ───────────────────────────────────────────
-// Serializa todos los objetos. Los no-stream elegibles se acumulan en
-// ObjStm_Builders y se vuelcan al final.
-// Devuelve sb y records[0..total_ids] (index = obj_id).
 
-pipeline_render :: proc(doc: ^Pdf_Document, plan: ^Render_Plan) -> (sb: strings.Builder, records: []Xref_Record) {
-	// records[0] = libre cabecera; records[1..total_ids] = objetos
+pipeline_render :: proc(doc: ^Pdf_Document, plan: ^Render_Plan, enc_ctx: ^Encryption_Context) -> (sb: strings.Builder, records: []Xref_Record) {
 	records = make([]Xref_Record, plan.total_ids + 1)
 	records[0] = Xref_Record{.Free, 0, 65535}
 
 	sb = strings.builder_make()
-	n  := len(doc.pages)
+	n := len(doc.pages)
 
-	// Mapa rápido: obj_id → Obj_Descriptor
 	obj_info := make(map[int]Obj_Descriptor)
 	defer delete(obj_info)
 	for desc in plan.objects { obj_info[desc.id] = desc }
 
-	// ObjStm builders (uno por cada ObjStm asignado en classify)
 	builders := make([]ObjStm_Builder, len(plan.objstm_ids))
 	for i in 0 ..< len(plan.objstm_ids) {
 		builders[i] = objstm_make(plan.objstm_ids[i])
@@ -673,21 +728,21 @@ pipeline_render :: proc(doc: ^Pdf_Document, plan: ^Render_Plan) -> (sb: strings.
 
 	write_header(&sb)
 
-	// ── Catálogo ──
+	// Catálogo
 	{
 		val := serialize_non_stream_value(plan.catalog_id, plan, doc, -1, "")
 		defer delete(val)
 		route_non_stream(plan.catalog_id, val, obj_info[plan.catalog_id], &sb, builders, records)
 	}
 
-	// ── Árbol de páginas ──
+	// Árbol de páginas
 	{
 		val := serialize_non_stream_value(plan.pages_id, plan, doc, -1, "")
 		defer delete(val)
 		route_non_stream(plan.pages_id, val, obj_info[plan.pages_id], &sb, builders, records)
 	}
 
-	// ── Diccionarios de página ──
+	// Diccionarios de página
 	for i in 0 ..< n {
 		pid := plan.page_ids[i]
 		val := serialize_non_stream_value(pid, plan, doc, i, "")
@@ -695,27 +750,36 @@ pipeline_render :: proc(doc: ^Pdf_Document, plan: ^Render_Plan) -> (sb: strings.
 		route_non_stream(pid, val, obj_info[pid], &sb, builders, records)
 	}
 
-	// ── Content streams (siempre directos) ──
+	// Content streams
 	for i in 0 ..< n {
-		cid     := plan.content_ids[i]
+		cid := plan.content_ids[i]
 		content := plan.page_data[i].content_str
-		offset  := i64(strings.builder_len(sb))
-		fmt.sbprintf(&sb, "%d 0 obj\n<< /Length %d >>\nstream\n%sendstream\nendobj\n",
-			cid, len(content), content)
+		offset := i64(strings.builder_len(sb))
+
+		if enc_ctx != nil {
+			encrypted := encrypt_data(enc_ctx.file_key, transmute([]byte)content)
+			defer delete(encrypted)
+			fmt.sbprintf(&sb, "%d 0 obj\n<< /Length %d /Filter /Crypt >>\nstream\n", cid, len(encrypted))
+			strings.write_bytes(&sb, encrypted)
+			strings.write_string(&sb, "\nendstream\nendobj\n")
+		} else {
+			fmt.sbprintf(&sb, "%d 0 obj\n<< /Length %d >>\nstream\n%sendstream\nendobj\n",
+				cid, len(content), content)
+		}
 		records[cid] = Xref_Record{.Direct, offset, 0}
 	}
 
-	// ── Imágenes (siempre directas: son streams) ──
+	// Imágenes
 	for i in 0 ..< n {
 		pr := &plan.page_data[i].resources
 		for img in pr.images {
 			if img.smask_id != 0 {
-				comp_alpha, _   := filter_apply_flate(img.alpha_data)
-				use_alpha_flate  := comp_alpha != nil && len(comp_alpha) < len(img.alpha_data)
-				alpha_payload   := use_alpha_flate ? comp_alpha : img.alpha_data
+				comp_alpha, _ := filter_apply_flate(img.alpha_data)
+				use_alpha_flate := comp_alpha != nil && len(comp_alpha) < len(img.alpha_data)
+				alpha_payload := use_alpha_flate ? comp_alpha : img.alpha_data
 
 				offset := i64(strings.builder_len(sb))
-				hdr    := strings.builder_make()
+				hdr := strings.builder_make()
 				fmt.sbprintf(&hdr,
 					"%d 0 obj\n<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceGray /BitsPerComponent 8",
 					img.smask_id, img.width, img.height)
@@ -729,17 +793,17 @@ pipeline_render :: proc(doc: ^Pdf_Document, plan: ^Render_Plan) -> (sb: strings.
 				if use_alpha_flate { delete(comp_alpha) }
 			}
 
-			comp_rgb, _  := filter_apply_flate(img.rgb_data)
+			comp_rgb, _ := filter_apply_flate(img.rgb_data)
 			use_rgb_flate := comp_rgb != nil && len(comp_rgb) < len(img.rgb_data)
-			rgb_payload  := use_rgb_flate ? comp_rgb : img.rgb_data
-			color_space  := img.channels == 1 || img.channels == 2 ? "/DeviceGray" : "/DeviceRGB"
+			rgb_payload := use_rgb_flate ? comp_rgb : img.rgb_data
+			color_space := img.channels == 1 || img.channels == 2 ? "/DeviceGray" : "/DeviceRGB"
 
 			offset := i64(strings.builder_len(sb))
-			hdr    := strings.builder_make()
+			hdr := strings.builder_make()
 			fmt.sbprintf(&hdr,
 				"%d 0 obj\n<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace %s /BitsPerComponent 8",
 				img.obj_id, img.width, img.height, color_space)
-			if use_rgb_flate     { strings.write_string(&hdr, " /Filter /FlateDecode") }
+			if use_rgb_flate { strings.write_string(&hdr, " /Filter /FlateDecode") }
 			if img.smask_id != 0 { fmt.sbprintf(&hdr, " /SMask %d 0 R", img.smask_id) }
 			fmt.sbprintf(&hdr, " /Length %d >>\nstream\n", len(rgb_payload))
 			strings.write_string(&sb, strings.to_string(hdr))
@@ -751,11 +815,10 @@ pipeline_render :: proc(doc: ^Pdf_Document, plan: ^Render_Plan) -> (sb: strings.
 		}
 	}
 
-	// ── Fuentes embebidas ──
+	// Fuentes embebidas
 	for key, emb in doc.embedded_fonts {
 		ids := plan.emb_ids[key]
 
-		// FontFile2: stream → siempre directo
 		offset_file := i64(strings.builder_len(sb))
 		fmt.sbprintf(&sb, "%d 0 obj\n<< /Length %d /Length1 %d >>\nstream\n",
 			ids.file_id, len(emb.ttf_data), len(emb.ttf_data))
@@ -763,7 +826,6 @@ pipeline_render :: proc(doc: ^Pdf_Document, plan: ^Render_Plan) -> (sb: strings.
 		strings.write_string(&sb, "\nendstream\nendobj\n")
 		records[ids.file_id] = Xref_Record{.Direct, offset_file, 0}
 
-		// Font_Widths, Font_Descriptor, Font_Dict: rotar a ObjStm o directo
 		val_w := serialize_non_stream_value(ids.widths_id, plan, doc, -1, key)
 		defer delete(val_w)
 		route_non_stream(ids.widths_id, val_w, obj_info[ids.widths_id], &sb, builders, records)
@@ -777,24 +839,52 @@ pipeline_render :: proc(doc: ^Pdf_Document, plan: ^Render_Plan) -> (sb: strings.
 		route_non_stream(ids.font_id, val_f, obj_info[ids.font_id], &sb, builders, records)
 	}
 
-	// ── Metadata XMP: stream → siempre directo ──
+	// Metadata XMP
 	{
 		offset := i64(strings.builder_len(sb))
 		write_xmp_object(&sb, plan.metadata_id, doc.metadata_info)
 		records[plan.metadata_id] = Xref_Record{.Direct, offset, 0}
 	}
 
-	// ── Volcar todos los ObjStm builders ──
+	// /Encrypt
+	if plan.encrypt_id > 0 && enc_ctx != nil {
+		offset := i64(strings.builder_len(sb))
+		write_encrypt_dict(&sb, plan.encrypt_id, enc_ctx)
+		records[plan.encrypt_id] = Xref_Record{.Direct, offset, 0}
+	}
+
+	// Campos de firma: /Sig (con placeholder) + /Widget
+	for i in 0 ..< len(doc.sig_fields) {
+		sf := doc.sig_fields[i]
+		ids := &plan.sig_ids[i]
+
+		// Objeto /Sig
+		base := strings.builder_len(sb)
+		ids.placeholder = write_sig_value_object(&sb, ids.sig_value_id, sf, base)
+		records[ids.sig_value_id] = Xref_Record{.Direct, i64(base), 0}
+
+		// Widget
+		page_id := plan.page_ids[sf.page] if sf.page < len(plan.page_ids) else plan.page_ids[0]
+		offset_w := i64(strings.builder_len(sb))
+		write_sig_widget(&sb, ids.widget_id, ids.sig_value_id, page_id, sf.rect)
+		records[ids.widget_id] = Xref_Record{.Direct, offset_w, 0}
+	}
+
+	// AcroForm
+	if plan.acroform_id > 0 {
+		val := serialize_non_stream_value(plan.acroform_id, plan, doc, -1, "")
+		defer delete(val)
+		route_non_stream(plan.acroform_id, val, obj_info[plan.acroform_id], &sb, builders, records)
+	}
+
+	// Volcar ObjStm builders
 	for i in 0 ..< len(builders) {
 		if objstm_len(&builders[i]) == 0 { continue }
 
 		written, ok := objstm_write(&builders[i], &sb)
 		if !ok { continue }
 
-		// XRef entry tipo 1 para el propio ObjStm
 		records[written.own_id] = Xref_Record{.Direct, written.offset, 0}
-
-		// XRef entries tipo 2 para cada objeto contenido
 		for entry in written.entries {
 			records[entry.obj_id] = Xref_Record{.Compressed, i64(written.own_id), entry.index}
 		}
@@ -805,16 +895,12 @@ pipeline_render :: proc(doc: ^Pdf_Document, plan: ^Render_Plan) -> (sb: strings.
 }
 
 // ── Etapa 5: Build XRef ───────────────────────────────────────
-// Escribe el Cross-Reference Stream (ISO 32000-2 §7.5.8) y %%EOF.
-// Reemplaza la tabla xref tradicional y el bloque trailer de file.odin.
 
 pipeline_build_xref :: proc(sb: ^strings.Builder, plan: ^Render_Plan, doc: ^Pdf_Document, records: []Xref_Record) {
 	xref_offset := i64(strings.builder_len(sb^))
-
-	// Registrar la entrada del propio XRef Stream (tipo Direct, apunta a sí mismo)
 	records[plan.xref_stream_id] = Xref_Record{.Direct, xref_offset, 0}
 
-	write_xref_stream(sb, plan.xref_stream_id, records, plan.catalog_id, doc.file_id)
+	write_xref_stream(sb, plan.xref_stream_id, records, plan.catalog_id, doc.file_id, plan.encrypt_id)
 
 	fmt.sbprintf(sb, "startxref\n%d\n%%%%EOF", xref_offset)
 }
@@ -822,27 +908,40 @@ pipeline_build_xref :: proc(sb: ^strings.Builder, plan: ^Render_Plan, doc: ^Pdf_
 // ── Punto de entrada de serialización ────────────────────────
 
 serialize_document :: proc(doc: ^Pdf_Document, filename: string) -> bool {
-	// Etapa 1
 	page_data, ok := pipeline_collect(doc)
 	if !ok { return false }
 
-	// Etapa 3: Assign (recibe propiedad de page_data, devuelve next_id)
 	plan, next_id := pipeline_assign(doc, page_data)
 	defer render_plan_destroy(&plan)
 
-	// Etapa 2: Classify (marca objetos, asigna IDs de ObjStm, actualiza next_id)
 	pipeline_classify(&plan, &next_id)
 
-	// ID del Cross-Reference Stream (último objeto del documento)
-	plan.xref_stream_id = next_id; next_id += 1
-	plan.total_ids      = next_id - 1
+	enc_ctx: Encryption_Context
+	enc_ptr: ^Encryption_Context = nil
 
-	// Etapa 4: Render
-	sb, records := pipeline_render(doc, &plan)
+	if sec, has_sec := doc.security.?; has_sec {
+		ctx, enc_ok := setup_encryption(sec)
+		if enc_ok {
+			enc_ctx = ctx
+			enc_ptr = &enc_ctx
+			plan.encrypt_id = next_id
+			append(&plan.objects, Obj_Descriptor{
+				id = next_id,
+				role = .Encrypt_Dict,
+				in_objstm = false,
+				objstm_idx = -1,
+			})
+			next_id += 1
+		}
+	}
+
+	plan.xref_stream_id = next_id; next_id += 1
+	plan.total_ids = next_id - 1
+
+	sb, records := pipeline_render(doc, &plan, enc_ptr)
 	defer strings.builder_destroy(&sb)
 	defer delete(records)
 
-	// Etapa 5: XRef Stream
 	pipeline_build_xref(&sb, &plan, doc, records)
 
 	_ = os.write_entire_file(filename, sb.buf[:])
