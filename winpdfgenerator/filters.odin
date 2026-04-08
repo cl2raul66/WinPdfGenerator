@@ -1,10 +1,8 @@
 #+private
 package winpdfgenerator
 
-import "core:fmt"
 import "core:strings"
-
-// ── Tipos de Filtros (ISO 32000-2 §7.4) ──────────────────────
+import zlib "vendor:zlib"
 
 Filter_Kind :: enum {
 	Flate_Decode,
@@ -40,20 +38,29 @@ Filter_Config :: struct {
 	flate: Maybe(Flate_Params),
 }
 
-// ── Lógica del Motor ──────────────────────────────────────────
-
-// CORRECCIÓN: core:compress/zlib solo expone inflate (descompresión).
-// Para deflate/compresión no hay API directa en la stdlib de Odin.
-// Esta función retorna los datos sin comprimir como fallback.
-// TODO: integrar una librería zlib via FFI (foreign import) para compresión real.
 filter_apply_flate :: proc(data: []byte) -> (result: []byte, ok: bool) {
 	if len(data) == 0 { return nil, true }
-	result = make([]byte, len(data))
-	copy(result, data)
-	return result, true
+
+	bound := zlib.compressBound(zlib.uLong(len(data)))
+	result  = make([]byte, bound)
+
+	dest_len := bound
+	status := zlib.compress2(
+		raw_data(result),
+		&dest_len,
+		raw_data(data),
+		zlib.uLong(len(data)),
+		zlib.BEST_COMPRESSION,
+	)
+
+	if status != 0 {
+		delete(result)
+		return nil, false
+	}
+
+	return result[:dest_len], true
 }
 
-// ASCII Base-85 (§7.4.3)
 filter_apply_ascii85 :: proc(src: []byte) -> []byte {
 	sb := strings.builder_make()
 	defer strings.builder_destroy(&sb)
@@ -72,7 +79,6 @@ filter_apply_ascii85 :: proc(src: []byte) -> []byte {
 		if val == 0 && chunk_len == 4 {
 			strings.write_byte(&sb, 'z')
 		} else {
-			// CORRECCIÓN: Era [4]byte; Base85 convierte 4 bytes → 5 caracteres.
 			out: [5]byte
 			v := val
 			for j := 4; j >= 0; j -= 1 {
@@ -86,8 +92,6 @@ filter_apply_ascii85 :: proc(src: []byte) -> []byte {
 
 	strings.write_string(&sb, "~>")
 
-	// CORRECCIÓN: strings.clone_to_byte_slice no existe en Odin.
-	// Copia manual a un nuevo slice de bytes.
 	s := strings.to_string(sb)
 	result := make([]byte, len(s))
 	copy(result, transmute([]byte)s)
@@ -108,7 +112,6 @@ apply_filters_to_stream :: proc(s: ^Pdf_Stream, configs: []Filter_Config) {
 	if len(configs) == 0 { return }
 
 	if len(configs) == 1 {
-		// CORRECCIÓN: acceso al elemento, no al slice completo.
 		c := configs[0]
 		s.dict["/Filter"] = filter_kind_to_name(c.kind)
 		if p, ok := c.flate.?; ok {

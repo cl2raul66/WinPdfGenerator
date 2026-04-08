@@ -16,9 +16,9 @@ write_xmp_object :: proc(sb: ^strings.Builder, id: int, info: Pdf_Info) {
 	now_iso := fmt.tprintf("%04d-%02d-%02dT%02d:%02d:%02dZ", y, int(m), d, h, min, s)
 
 	create_date := info.creation_date != "" ? info.creation_date : now_iso
-	mod_date    := info.mod_date      != "" ? info.mod_date      : now_iso
+	mod_date := info.mod_date != "" ? info.mod_date : now_iso
 
-	xmp_template := `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+	xmp_content := fmt.aprintf(`<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -38,9 +38,7 @@ write_xmp_object :: proc(sb: ^strings.Builder, id: int, info: Pdf_Info) {
   </rdf:Description>
  </rdf:RDF>
 </x:xmpmeta>
-<?xpacket end="w"?>`
-
-	xmp_content := fmt.aprintf(xmp_template,
+<?xpacket end="w"?>`,
 		info.title, info.author, info.subject,
 		create_date, mod_date, info.creator,
 		info.producer, info.keywords,

@@ -5,12 +5,23 @@ import "core:c"
 foreign import wpg "../../bin/WinPdfGenerator.lib"
 
 wpg_metadata :: struct {
-	title, author, subject, keywords, creator, producer: cstring,
-	creation_date, mod_date:                             cstring,
+	title, author, subject, keywords, creator, producer, creation_date, mod_date: cstring,
 }
 
 wpg_embedded_font :: struct {
 	path, alias: cstring,
+}
+
+wpg_sig_field :: struct {
+	page: c.int,
+	rect_llx, rect_lly, rect_urx, rect_ury: c.float,
+	reason, location, contact: cstring,
+	reserved_size: c.int,
+}
+
+wpg_security :: struct {
+	user_password, owner_password: cstring,
+	allow_print, allow_modify, allow_copy, allow_annotate, encrypt_metadata: c.bool,
 }
 
 @(default_calling_convention = "c")
@@ -38,4 +49,13 @@ foreign wpg {
 
 	@(link_name = "wpg_page_add_image")
 	wpg_page_add_image :: proc(page: rawptr, path: cstring, x, y, w, h: c.float) ---
+
+	@(link_name = "wpg_document_add_sig_field")
+	wpg_document_add_sig_field :: proc(doc: rawptr, field: ^wpg_sig_field) -> c.bool ---
+
+	@(link_name = "wpg_document_patch_signature")
+	wpg_document_patch_signature :: proc(pdf_buf: [^]byte, pdf_len: c.int, ph: rawptr, signature_data: [^]byte, sig_len: c.int) -> c.bool ---
+
+	@(link_name = "wpg_document_set_security")
+	wpg_document_set_security :: proc(doc: rawptr, sec: ^wpg_security) -> c.bool ---
 }
