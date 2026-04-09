@@ -25,7 +25,7 @@
   },
   {
     "label": "Odin: Run SampleSimple",
-    "command": "bin/SampleSimple.exe",
+    "command": "odin run sample/SampleSimple -out:bin/SampleSimple.exe",
     "allow_concurrent_runs": false,
     "reveal": "always",
   },

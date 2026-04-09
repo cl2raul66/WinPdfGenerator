@@ -77,7 +77,6 @@ Annotation_Highlight :: struct {
 
 Pdf_Page :: struct {
 	media_box: Rect,
-	resources: Pdf_Dict,
 	items: [dynamic]Content_Item,
 	annotations: [dynamic]Annotation,
 }
@@ -89,8 +88,6 @@ Embedded_Font :: struct {
 	bbox: Rect,
 	flags: u32,
 	widths: [256]f32,
-	font_obj_id, desc_obj_id,
-	widths_obj_id, file_obj_id: int,
 }
 
 Pdf_Document :: struct {
@@ -100,5 +97,4 @@ Pdf_Document :: struct {
 	security: Maybe(Security_Handler),
 	sig_fields: [dynamic]^Sig_Field,
 	embedded_fonts: map[string]Embedded_Font,
-	next_obj_num: i64,
 }
