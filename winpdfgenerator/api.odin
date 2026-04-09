@@ -27,35 +27,34 @@ wpg_document_add_page :: proc "c" (doc: ^Pdf_Document, width, height: c.float) -
 	return core_document_add_page(doc, f32(width), f32(height))
 }
 
-wpg_metadata :: struct {
-	title, author, subject, keywords, creator, producer: cstring,
-	creation_date, mod_date: cstring,
+wpg_metadata_dto :: struct {
+	title, author, subject, keywords, creator, producer, 	creation_date, mod_date: cstring,
 }
 
 @(export)
-wpg_document_set_metadata :: proc "c" (doc: ^Pdf_Document, metadata_struct: ^wpg_metadata) {
+wpg_document_set_metadata :: proc "c" (doc: ^Pdf_Document, md_dto: ^wpg_metadata_dto) {
 	context = runtime.default_context()
 	core_document_set_metadata(
 		doc,
-		metadata_struct.title,
-		metadata_struct.author,
-		metadata_struct.subject,
-		metadata_struct.keywords,
-		metadata_struct.creator,
-		metadata_struct.producer,
-		metadata_struct.creation_date,
-		metadata_struct.mod_date,
+		md_dto.title,
+		md_dto.author,
+		md_dto.subject,
+		md_dto.keywords,
+		md_dto.creator,
+		md_dto.producer,
+		md_dto.creation_date,
+		md_dto.mod_date,
 	)
 }
 
-wpg_embedded_font :: struct {
+wpg_embedded_font_dto :: struct {
 	path, alias: cstring,
 }
 
 @(export)
-wpg_document_add_embedded_font :: proc "c" (doc: ^Pdf_Document, embedded_font: ^wpg_embedded_font) -> c.bool {
+wpg_document_add_embedded_font :: proc "c" (doc: ^Pdf_Document, ef_dto: ^wpg_embedded_font_dto) -> c.bool {
 	context = runtime.default_context()
-	return core_document_add_embedded_font(doc, embedded_font.path, embedded_font.alias)
+	return core_document_add_embedded_font(doc, ef_dto.path, ef_dto.alias)
 }
 
 @(export)
@@ -70,25 +69,19 @@ wpg_page_add_image :: proc "c" (page: ^Pdf_Page, path: cstring, x, y, w, h: c.fl
 	core_page_add_image(page, path, f32(x), f32(y), f32(w), f32(h))
 }
 
-// ── API de Firma Digital ──────────────────────────────────────
-
-wpg_sig_field :: struct {
-	page: c.int,
+wpg_sig_field_dto :: struct {
+	page, reserved_size: c.int,
 	rect_llx, rect_lly, rect_urx, rect_ury: c.float,
 	reason, location, contact: cstring,
-	reserved_size: c.int,
 }
 
 @(export)
-wpg_document_add_sig_field :: proc "c" (doc: ^Pdf_Document, field: ^wpg_sig_field) -> c.bool {
+wpg_document_add_sig_field :: proc "c" (doc: ^Pdf_Document, field_dto: ^wpg_sig_field_dto) -> c.bool {
 	context = runtime.default_context()
-	if doc == nil || field == nil do return false
-	return c.bool(core_document_add_sig_field(doc, field))
+	if doc == nil || field_dto == nil do return false
+	return c.bool(core_document_add_sig_field(doc, field_dto))
 }
 
-// Aplica ByteRange y firma DER al buffer del PDF ya serializado en memoria.
-// Llamar con signature_data = nil primero para solo parchear ByteRange,
-// luego con la firma DER real.
 @(export)
 wpg_document_patch_signature :: proc "c" (pdf_buf: [^]byte, pdf_len: c.int, ph: ^Sig_Placeholder, signature_data: [^]byte, sig_len: c.int,) -> c.bool {
 	context = runtime.default_context()
@@ -102,29 +95,27 @@ wpg_document_patch_signature :: proc "c" (pdf_buf: [^]byte, pdf_len: c.int, ph: 
 	return c.bool(patch_signature(buf, ph^, sig_slice))
 }
 
-// ── Seguridad AES-256 ─────────────────────────────────────────
-
-wpg_security :: struct {
+wpg_security_dto :: struct {
 	user_password, owner_password: cstring,
 	allow_print, allow_modify, allow_copy, allow_annotate, encrypt_metadata: c.bool,
 }
 
 @(export)
-wpg_document_set_security :: proc "c" (doc: ^Pdf_Document, sec: ^wpg_security) -> c.bool {
+wpg_document_set_security :: proc "c" (doc: ^Pdf_Document, sec_dto: ^wpg_security_dto) -> c.bool {
 	context = runtime.default_context()
-	if doc == nil || sec == nil do return false
+	if doc == nil || sec_dto == nil do return false
 
 	perms: Permissions
-	if bool(sec.allow_print) { perms += {.Print, .Print_High} }
-	if bool(sec.allow_modify) { perms += {.Modify, .Assemble} }
-	if bool(sec.allow_copy) { perms += {.Copy, .Extract} }
-	if bool(sec.allow_annotate) { perms += {.Annotate, .Fill_Forms} }
+	if bool(sec_dto.allow_print) { perms += {.Print, .Print_High} }
+	if bool(sec_dto.allow_modify) { perms += {.Modify, .Assemble} }
+	if bool(sec_dto.allow_copy) { perms += {.Copy, .Extract} }
+	if bool(sec_dto.allow_annotate) { perms += {.Annotate, .Fill_Forms} }
 
 	doc.security = Security_Handler{
-		user_password = string(sec.user_password),
-		owner_password = string(sec.owner_password),
+		user_password = string(sec_dto.user_password),
+		owner_password = string(sec_dto.owner_password),
 		permissions = perms,
-		encrypt_metadata = bool(sec.encrypt_metadata),
+		encrypt_metadata = bool(sec_dto.encrypt_metadata),
 	}
 	return true
 }

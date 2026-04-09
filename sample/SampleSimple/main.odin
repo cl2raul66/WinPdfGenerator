@@ -8,7 +8,7 @@ main :: proc() {
 
 	page := wpg_document_add_page(doc, 595.0, 842.0)
 
-	// metadata := wpg_metadata{
+	// metadata := wpg_metadata_dto{
 	// 	title = "Sample PDF Document",
 	// 	author = "WinPdfGenerator",
 	// 	subject = "PDF Generation Example",
@@ -18,18 +18,18 @@ main :: proc() {
 	// }
 	// wpg_document_set_metadata(doc, &metadata)
 
-	// font := wpg_embedded_font{
-	// 	path = "media\\Inkfree.ttf",
-	// 	alias = "InkFree",
-	// }
-	// wpg_document_add_embedded_font(doc, &font)
+	font := wpg_embedded_font_dto{
+		path = "media\\Inkfree.ttf",
+		alias = "InkFree",
+	}
+	wpg_document_add_embedded_font(doc, &font)
 
 	wpg_page_add_text(page, "Hello, PDF 2.0!", 72.0, 750.0, "Helvetica", 24.0, {1, 0, 0})
-	// wpg_page_add_text(page, "New text with system font", 72.0, 734.0, "Comic Sans MS", 16.0, {0, 0, 0})
-	// wpg_page_add_text(page, "New text with embedded font", 72.0, 718.0, "InkFree", 12.0, {0, 0, 0})
+	wpg_page_add_text(page, "New text with system font", 72.0, 734.0, "Comic Sans MS", 16.0, {0, 0, 0})
+	wpg_page_add_text(page, "New text with embedded font", 72.0, 718.0, "InkFree", 12.0, {0, 0, 0})
 
-	// local_img : cstring = "media\\logo.png"
-	// wpg_page_add_image(page, local_img, 72.0, 568.0, 150.0, 150.0)
+	local_img : cstring = "media\\logo.png"
+	wpg_page_add_image(page, local_img, 72.0, 568.0, 150.0, 150.0)
 
 	// wpg_page_add_text(page, "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.\n\nLorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.", 72.0, 412.0, "Times New Roman", 12.0, {0, 0, 0})
 
